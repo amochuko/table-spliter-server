@@ -7,6 +7,7 @@
     "rootDir": "src",
     "allowJs": true,
     "resolveJsonModule": true,
+    "typeRoots": ["src/types"],
 
     /* Language and Environment */
     "target": "esnext",
