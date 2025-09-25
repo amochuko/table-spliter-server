@@ -28,4 +28,39 @@ router.get("/register", async (req, res) => {
   res.json({ data: { token, user } });
 });
 
+router.get("/login", async (req, res) => {
+  const { username, password } = req.body;
+
+  if (!username || !password) {
+    res.status(400).json({ error: "Missing login information" });
+    return;
+  }
+
+  const result = await sql({
+    text: `SELECT * FROM users WHERE username = $1`,
+    params: [username],
+  });
+
+  const user = result.rows[0];
+  if (!user) {
+    res.status(400).json({ error: "Invalid credentials" });
+  }
+
+  const comparePwd = await bcrypt.compare(password, user.password_hash);
+  if (!comparePwd) {
+    res.status(400).json({ error: "Invalid credentianls" });
+  }
+
+  const token = signToken(
+    JSON.stringify({ id: user.id, username: user.username })
+  );
+
+  res.json({
+    data: {
+      token,
+      user: { id: user.id, username: user.username, zaddr: user.zaddr },
+    },
+  });
+});
+
 export default router;
