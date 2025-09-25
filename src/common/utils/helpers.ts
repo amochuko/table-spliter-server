@@ -12,3 +12,9 @@ export const parseIntSafe = (value: string): number | null => {
 export const signToken = (payload: string) => {
   return jwt.sign(payload, env.JWT_SECRET, { expiresIn: "7d" });
 };
+
+// Session invite code
+
+export const getInviteCode = () => {
+  return Math.random().toString(36).slice(2, 8);
+};
