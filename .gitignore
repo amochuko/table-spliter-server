@@ -1,0 +1,14 @@
+/node_modules
+.env
+.env.test
+.DS_Store
+/src/demo.js
+/src/server.js
+/report
+/http
+/.vscode
+*.generated.*
+/src/scripts/demo.ts
+coverage/
+/dist
+/src
