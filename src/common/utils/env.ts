@@ -4,6 +4,7 @@ dotenv.config();
 const envs = {
   COOKIE_SECRET: String(process.env.COOKIE_SECRET),
   JWT_SECRET: String(process.env.JWT_SECRET),
+  APP_SCHEME: "tabsplit://",
 
   // POSTGRESS
   PGHOST_LOCAL: process.env.PGHOST_LOCAL,
