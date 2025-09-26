@@ -5,9 +5,10 @@ import { signToken } from "../../common/utils/helpers";
 
 const router = express.Router({ mergeParams: true });
 
-router.get("/register", async (req, res) => {
-  const { username, password, zaddr } = req.body;
-  if (!username || !password) {
+router.post("/register", async (req, res) => {
+  const { email, password } = req.body;
+
+  if (!email || !password) {
     res.status(400).json({ error: "Missing Reg. information" });
     return;
   }
@@ -15,30 +16,30 @@ router.get("/register", async (req, res) => {
   const hash = await bcrypt.hash(password, 10);
 
   const result = await sql({
-    text: `INSERT INTO users (username, password_hash, zaddr)
-    RETURNING id, username, zaddr`,
-    params: [username, hash, zaddr || null],
+    text: `INSERT INTO users (email, password_hash) VALUES ($1,$2)
+    RETURNING id, email`,
+    params: [email, hash],
   });
 
   const user = result.rows[0];
   const token = signToken(
-    JSON.stringify({ id: user.id, username: user.username })
+    JSON.stringify({ id: user.id, username: user.email })
   );
 
   res.json({ data: { token, user } });
 });
 
-router.get("/login", async (req, res) => {
-  const { username, password } = req.body;
+router.post("/login", async (req, res) => {
+  const { email, password } = req.body;
 
-  if (!username || !password) {
+  if (!email || !password) {
     res.status(400).json({ error: "Missing login information" });
     return;
   }
 
   const result = await sql({
-    text: `SELECT * FROM users WHERE username = $1`,
-    params: [username],
+    text: `SELECT * FROM users WHERE email = $1`,
+    params: [email],
   });
 
   const user = result.rows[0];
@@ -52,13 +53,13 @@ router.get("/login", async (req, res) => {
   }
 
   const token = signToken(
-    JSON.stringify({ id: user.id, username: user.username })
+    JSON.stringify({ id: user.id, username: user.email })
   );
 
   res.json({
     data: {
       token,
-      user: { id: user.id, username: user.username, zaddr: user.zaddr },
+      user: { id: user.id, username: user.email, zaddr: user.zaddr },
     },
   });
 });
