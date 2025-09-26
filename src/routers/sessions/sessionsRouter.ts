@@ -4,6 +4,7 @@ import { sql } from "../../common/database/sqlConnection";
 import env from "../../common/utils/env";
 import { getInviteCode } from "../../common/utils/helpers";
 import { authMiddleware } from "../../middleware/authMiddleware";
+import { Session } from "../../types/session";
 
 const APP_SCHEME = env.APP_SCHEME || "tabsplit://";
 
@@ -28,7 +29,7 @@ router.post("/", authMiddleware, async (req, res) => {
   // add creator as participant
   const participantResult = await sql({
     text: `INSERT INTO participants (session_id, user_id, username, zaddr)`,
-    params: [session.id, req.user.id, req.user.username, null],
+    params: [session.id, req.user?.id, req.user?.username, null],
   });
 
   const participant = participantResult.rows[0];
@@ -93,8 +94,10 @@ router.post("/:id/expenses", authMiddleware, async (req, res) => {
   const id = req.params.id;
   const { memo, amount } = req.body;
 
-  if (!memo || !amount)
-    return res.status(400).json({ error: "Missing credentials" });
+  if (!memo || !amount) {
+    res.status(400).json({ error: "Missing credentials" });
+    return;
+  }
 
   // find participant in current user session
   const part_result = await sql({
@@ -109,7 +112,7 @@ router.post("/:id/expenses", authMiddleware, async (req, res) => {
     return;
   }
 
-  const expense_insert_result = await sql({
+  await sql({
     text: `INSERT INTO expenses (session_id, payer_id, amount, memo) VALUES ($1,$2,$3,$4) RETURNING *`,
     params: [id, participant.id, amount, memo],
   });
@@ -139,7 +142,7 @@ router.post("/join", authMiddleware, async (req, res) => {
     text: `SELECT * FROM sessions WHERE invite_code = $1`,
     params: [inviteCode],
   });
-  const session = sessions_result.rows;
+  const session: Session = sessions_result.rows[0];
 
   if (!session) {
     res.status(404).json({ error: "Invalid invite code" });
@@ -150,13 +153,13 @@ router.post("/join", authMiddleware, async (req, res) => {
   // check participant exist
   const participants_result = await sql({
     text: `SELECT * FROM participants WHERE session_id = $1 AND user_id = $2`,
-    params: [session.id, req.user?.id, req.user.username],
+    params: [session.id, req.user?.id, req.user?.username],
   });
 
   if (!participants_result.rows[0]) {
     const p = await sql({
       text: `INSERT INTO participants (session_id, user_id, username) VALUES ($1,$2,$3) RETURNING *`,
-      params: [session.id, req.user.id, req.user.username],
+      params: [session.id, req.user?.id, req.user?.username],
     });
     participant = p.rows[0];
   } else {
