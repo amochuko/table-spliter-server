@@ -1,9 +1,8 @@
-import bcrypt from "bcrypt";
 import express from "express";
 import QRCode from "qrcode";
 import { sql } from "../../common/database/sqlConnection";
 import env from "../../common/utils/env";
-import { getInviteCode, signToken } from "../../common/utils/helpers";
+import { getInviteCode } from "../../common/utils/helpers";
 import { authMiddleware } from "../../middleware/authMiddleware";
 
 const APP_SCHEME = env.APP_SCHEME || "tabsplit://";
@@ -54,7 +53,38 @@ router.post("/", authMiddleware, async (req, res) => {
   });
 });
 
+router.get("/:id", authMiddleware, async (req, res) => {
+  const id = req.params.id;
+  try {
+    const result = await sql({
+      text: `SELECT * FROM sessions WHERE if = $1`,
+      params: [id],
+    });
 
+    if (!result.rows) {
+      res.status(404).json({ error: "Not found!" });
+    }
 
+    const session = result.rows[0];
+    const participants = (
+      await sql({
+        text: `SELECT id, username,zaddr, user_id FROM participants WHERE session_id = $1`,
+        params: [id],
+      })
+    ).rows;
+    const expenses = (await sql({
+      text: `SELECT e.*, p.username as payer_username, p.id as payer_participant_id FROM expenses e 
+    LEFT JOIN participants p ON p.id = e.payer_id
+    WHERE e.session_id = $1 
+    ORDER BY e.created_at ASC`,
+      params: [id],
+    })).rows;
+
+    res.json({data:{session, participants, expenses}})
+    
+  } catch (err) {
+    console.error("sessions/:id", err);
+  }
+});
 
 export default router;
