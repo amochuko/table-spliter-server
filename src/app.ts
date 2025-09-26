@@ -4,10 +4,9 @@ import cors from "cors";
 import express, { Application, NextFunction, Request, Response } from "express";
 import helmet from "helmet";
 import morgan from "morgan";
-
 import envs from "./common/utils/env";
 import { requestTime } from "./middleware";
-import { homeRouter, tableSplitrouter } from "./routers";
+import { mountRouters } from "./routers";
 
 class App {
   public app: Application;
@@ -47,6 +46,19 @@ class App {
       })
     );
 
+    this.app.use(requestTime);
+  }
+
+  private initDB() {}
+
+  private initRoutes() {
+    this.app.get("/health", (req, res) => {
+      res.json({ data: "Server up and running!" });
+    });
+
+    // Mount all routers first
+    mountRouters(this.app);
+
     this.app.use(
       (
         // eslint-disable-next-line no-undef
@@ -61,24 +73,11 @@ class App {
         res.status(500).send({ error: "Something broke" });
       }
     );
-
-    this.app.use(requestTime);
-
     process.on("uncaughtException", (err) => {
       console.error(`${err.name} ${err.message}`);
     });
-  }
 
-  private initDB() {}
-
-  private initRoutes() {
-    this.app.get("/health", (req, res) => {
-      res.json({ data: "Server up and running!" });
-    });
-
-    this.app.use("/", homeRouter);
-    this.app.use("/tableSplitrouter", tableSplitrouter);
-
+    // Then mount the 404 handler
     console.log("Mounting 404 fallback...");
     this.app.use((req, res) => {
       console.log("Hit global 404 handler for:", req.path);
