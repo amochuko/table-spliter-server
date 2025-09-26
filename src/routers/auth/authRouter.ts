@@ -16,17 +16,16 @@ router.post("/register", async (req, res) => {
   const hash = await bcrypt.hash(password, 10);
 
   const result = await sql({
-    text: `INSERT INTO users (username, password_hash) VALUES ($1,$2)
-    RETURNING id, username, zaddr`,
+    text: `INSERT INTO users (username, password_hash) 
+            VALUES ($1,$2)
+            RETURNING id, username, zaddr`,
     params: [email, hash],
   });
 
   const user = result.rows[0];
-  const token = signToken(
-    JSON.stringify({ id: user.id, username: user.username })
-  );
+  const token = signToken({ userId: user.id, email: user.username });
 
-  res.json({ data: { token, user } });
+  res.json({ token, user });
 });
 
 router.post("/login", async (req, res) => {
@@ -52,15 +51,11 @@ router.post("/login", async (req, res) => {
     res.status(400).json({ error: "Invalid credentianls" });
   }
 
-  const token = signToken(
-    JSON.stringify({ id: user.id, username: user.email })
-  );
+  const token = signToken({ userId: user.id, email: user.email });
 
   res.json({
-    data: {
-      token,
-      user: { id: user.id, username: user.email, zaddr: user.zaddr },
-    },
+    token,
+    user: { id: user.id, username: user.email, zaddr: user.zaddr },
   });
 });
 
