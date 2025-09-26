@@ -1,5 +1,6 @@
 import jwt from "jsonwebtoken";
 import env from "./env";
+import { TokenPayload } from "../../types/express/token-payload";
 
 export const parseIntSafe = (value: string): number | null => {
   if (/^(\d+)$/.test(value)) {
@@ -9,8 +10,8 @@ export const parseIntSafe = (value: string): number | null => {
   return null;
 };
 
-export const signToken = (payload: string) => {
-  return jwt.sign(payload, env.JWT_SECRET, { expiresIn: "7d" });
+export const signToken = (payload: TokenPayload) => {
+  return jwt.sign(payload, env.JWT_SECRET, { expiresIn: '7d' });
 };
 
 // Session invite code
