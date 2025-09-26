@@ -43,7 +43,7 @@ export const dbClient = {
 };
 
 dbClient.getPool().on("connect", async (client) => {
-  await client.query(`SET search_path TO inventory;`);
+  await client.query(`SET search_path TO zcash_101_table_spliter;`);
 });
 
 dbClient.getPool().on("error", (err) => {
