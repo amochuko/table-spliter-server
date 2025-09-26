@@ -16,14 +16,14 @@ router.post("/register", async (req, res) => {
   const hash = await bcrypt.hash(password, 10);
 
   const result = await sql({
-    text: `INSERT INTO users (email, password_hash) VALUES ($1,$2)
-    RETURNING id, email`,
+    text: `INSERT INTO users (username, password_hash) VALUES ($1,$2)
+    RETURNING id, username, zaddr`,
     params: [email, hash],
   });
 
   const user = result.rows[0];
   const token = signToken(
-    JSON.stringify({ id: user.id, username: user.email })
+    JSON.stringify({ id: user.id, username: user.username })
   );
 
   res.json({ data: { token, user } });
@@ -38,7 +38,7 @@ router.post("/login", async (req, res) => {
   }
 
   const result = await sql({
-    text: `SELECT * FROM users WHERE email = $1`,
+    text: `SELECT * FROM users WHERE username = $1`,
     params: [email],
   });
 
