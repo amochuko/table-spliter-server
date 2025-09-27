@@ -1,6 +1,6 @@
-export type AuthUser ={
-    id:string;
-    email?:string;
-    username?:string;
-    role?: 'user' | 'admin'
-}
+export type AuthUser = {
+  userId: string;
+  email?: string;
+  username?: string;
+  role?: "user" | "admin";
+};
