@@ -20,12 +20,11 @@ export const authMiddleware = async (
     const payload = jwt.verify(token, envs.JWT_SECRET);
 
     if (typeof payload === "string") {
-       res.status(401).json({ error: "Invalid token format!" });
+      res.status(401).json({ error: "Invalid token format!" });
     }
 
-    console.log("authMiddleware: ", payload);
     req.user = payload as AuthUser;
-
+      
     next();
   } catch (err) {
     console.error("authMiddleware: ", err);
