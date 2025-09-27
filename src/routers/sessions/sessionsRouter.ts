@@ -31,12 +31,12 @@ router.post("/", authMiddleware, async (req, res) => {
   // add creator as participant
   const participantResult = await sql({
     text: `INSERT INTO participants (session_id, user_id, username, zaddr)
-      VALUES ($1,$2,$3,$4)`,
+      VALUES ($1,$2,$3,$4)
+      RETURNING *`,
     params: [session.id, req.user?.userId, req.user?.username, null],
   });
 
   const participant = participantResult.rows[0];
-
   // create invite url and QR data URL
   const inviteUrl = `${APP_SCHEME}join/${session.invite_code}`;
   const qrDatatUrl = await QRCode.toDataURL(inviteUrl);
