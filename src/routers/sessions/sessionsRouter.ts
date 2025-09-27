@@ -20,16 +20,19 @@ router.post("/", authMiddleware, async (req, res) => {
   const inviteCode = getInviteCode();
 
   const result = await sql({
-    text: `INSERT INTO sessions (title, currency, invite_code, created_by) RETURNING *`,
-    params: [title, currency || "ZEC", inviteCode, req.user!.id],
+    text: `INSERT INTO sessions (title, currency, invite_code, created_by) 
+    VALUES ($1,$2,$3,$4)
+    RETURNING *`,
+    params: [title, currency || "ZEC", inviteCode, req.user?.userId],
   });
 
   const session = result.rows[0];
 
   // add creator as participant
   const participantResult = await sql({
-    text: `INSERT INTO participants (session_id, user_id, username, zaddr)`,
-    params: [session.id, req.user?.id, req.user?.username, null],
+    text: `INSERT INTO participants (session_id, user_id, username, zaddr)
+      VALUES ($1,$2,$3,$4)`,
+    params: [session.id, req.user?.userId, req.user?.username, null],
   });
 
   const participant = participantResult.rows[0];
@@ -39,18 +42,16 @@ router.post("/", authMiddleware, async (req, res) => {
   const qrDatatUrl = await QRCode.toDataURL(inviteUrl);
 
   res.json({
-    data: {
-      session: {
-        id: session.id,
-        title: session.title,
-        currency: session.currency,
-        invite_code: session.invite_code,
-        created_by: session.created_by,
-        invite_url: inviteUrl,
-        qr: qrDatatUrl,
-      },
-      participant,
+    session: {
+      id: session.id,
+      title: session.title,
+      currency: session.currency,
+      invite_code: session.invite_code,
+      created_by: session.created_by,
+      invite_url: inviteUrl,
+      qr: qrDatatUrl,
     },
+    participant,
   });
 });
 
@@ -83,7 +84,7 @@ router.get("/:id", authMiddleware, async (req, res) => {
       })
     ).rows;
 
-    res.json({ data: { session, participants, expenses } });
+    res.json({ session, participants, expenses });
   } catch (err) {
     console.error("sessions/:id", err);
   }
@@ -103,7 +104,7 @@ router.post("/:id/expenses", authMiddleware, async (req, res) => {
   const part_result = await sql({
     text: `SELECT * FROM participants
       WHERE session_id = $1 AND user_id = $2`,
-    params: [id, req.user?.id],
+    params: [id, req.user?.userId],
   });
 
   const participant = part_result.rows[0];
@@ -132,7 +133,7 @@ router.post("/:id/expenses", authMiddleware, async (req, res) => {
     })
   ).rows;
 
-  res.json({ data: { sessionId: id, participants, expenses } });
+  res.json({ sessionId: id, participants, expenses });
 });
 
 router.post("/join", authMiddleware, async (req, res) => {
@@ -153,13 +154,13 @@ router.post("/join", authMiddleware, async (req, res) => {
   // check participant exist
   const participants_result = await sql({
     text: `SELECT * FROM participants WHERE session_id = $1 AND user_id = $2`,
-    params: [session.id, req.user?.id, req.user?.username],
+    params: [session.id, req.user?.userId, req.user?.username],
   });
 
   if (!participants_result.rows[0]) {
     const p = await sql({
       text: `INSERT INTO participants (session_id, user_id, username) VALUES ($1,$2,$3) RETURNING *`,
-      params: [session.id, req.user?.id, req.user?.username],
+      params: [session.id, req.user?.userId, req.user?.username],
     });
     participant = p.rows[0];
   } else {
@@ -184,7 +185,7 @@ router.post("/join", authMiddleware, async (req, res) => {
     })
   ).rows;
 
-  res.json({ data: { session, participant, participants, expenses } });
+  res.json({ session, participant, participants, expenses });
 });
 
 export default router;
