@@ -10,9 +10,24 @@ const APP_SCHEME = env.APP_SCHEME || "tabsplit://";
 
 const router = express.Router({ mergeParams: true });
 
+router.get("/", authMiddleware, async (req, res) => {
+  try {
+    const result = await sql({
+      text: `SELECT * FROM sessions 
+          WHERE created_by = $1`,
+      params: [req.user?.userId],
+    });
+
+    res.json({ sessions: result.rows });
+  } catch (err) {
+    console.error(err);
+    res.status(404).json({ error: "Failed to fetch sessions" });
+  }
+});
+
 router.post("/", authMiddleware, async (req, res) => {
   const { title, currency } = req.body;
-
+    console.log({ title, currency });
   if (!title) {
     res.status(400).json({ error: "Session needs a title" });
   }
@@ -59,7 +74,7 @@ router.get("/:id", authMiddleware, async (req, res) => {
   const id = req.params.id;
   try {
     const result = await sql({
-      text: `SELECT * FROM sessions WHERE if = $1`,
+      text: `SELECT * FROM sessions WHERE id = $1`,
       params: [id],
     });
 
@@ -120,7 +135,7 @@ router.post("/:id/expenses", authMiddleware, async (req, res) => {
 
   const participants = (
     await sql({
-      text: `SELECT if, username, zaddr, user_id FROM participants WHERE session_id = $1`,
+      text: `SELECT id, username, zaddr, user_id FROM participants WHERE session_id = $1`,
       params: [id],
     })
   ).rows;
