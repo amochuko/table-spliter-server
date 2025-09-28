@@ -26,8 +26,8 @@ router.get("/", authMiddleware, async (req, res) => {
 });
 
 router.post("/", authMiddleware, async (req, res) => {
-  const { title, currency } = req.body;
-    console.log({ title, currency });
+  const { title, currency, description } = req.body;
+    console.log({ title, description });
   if (!title) {
     res.status(400).json({ error: "Session needs a title" });
   }
@@ -35,10 +35,10 @@ router.post("/", authMiddleware, async (req, res) => {
   const inviteCode = getInviteCode();
 
   const result = await sql({
-    text: `INSERT INTO sessions (title, currency, invite_code, created_by) 
-    VALUES ($1,$2,$3,$4)
+    text: `INSERT INTO sessions (title, description, currency, invite_code, created_by) 
+    VALUES ($1,$2,$3,$4,$5)
     RETURNING *`,
-    params: [title, currency || "ZEC", inviteCode, req.user?.userId],
+    params: [title, description, currency || "ZEC", inviteCode, req.user?.userId],
   });
 
   const session = result.rows[0];
@@ -60,6 +60,7 @@ router.post("/", authMiddleware, async (req, res) => {
     session: {
       id: session.id,
       title: session.title,
+      description: session.description,
       currency: session.currency,
       invite_code: session.invite_code,
       created_by: session.created_by,
