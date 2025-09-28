@@ -6,17 +6,14 @@ const router = express.Router({ mergeParams: true });
 
 router.get("/me", authMiddleware, async (req, res) => {
   const result = await sql({
-    text: `SELECT * FROM users (user_id) 
-            VALUES ($1)
+    text: `SELECT id, username, zaddr FROM users 
+            WHERE id = $1
             RETURNING id, username, zaddr`,
     params: [req.user?.userId],
   });
 
-  const user = result.rows[0];
-
-  res.json({ username: user.username, zaddr: user.zaddr });
+  res.json({ user: result.rows[0] });
 });
-
 
 router.patch("/me", async (req, res) => {
   const { zaddr } = req.body;
@@ -27,15 +24,13 @@ router.patch("/me", async (req, res) => {
   }
 
   const result = await sql({
-    text: `SELECT * FROM users WHERE user_id = $1
-    SET zaddr = ($2)`,
-    params: [req.user?.userId, zaddr],
+    text: `UPDATE users
+    SET zaddr = $1
+    WHERE id = $2`,
+    params: [zaddr, req.user?.userId],
   });
 
   const user = result.rows[0];
-  if (!user) {
-    res.status(400).json({ error: "Invalid credentials" });
-  }
 
   res.json({
     user: { id: user.id, username: user.email, zaddr: user.zaddr },
