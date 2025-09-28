@@ -27,7 +27,7 @@ router.get("/", authMiddleware, async (req, res) => {
 
 router.post("/", authMiddleware, async (req, res) => {
   const { title, currency, description } = req.body;
-    console.log({ title, description });
+
   if (!title) {
     res.status(400).json({ error: "Session needs a title" });
   }
@@ -38,7 +38,13 @@ router.post("/", authMiddleware, async (req, res) => {
     text: `INSERT INTO sessions (title, description, currency, invite_code, created_by) 
     VALUES ($1,$2,$3,$4,$5)
     RETURNING *`,
-    params: [title, description, currency || "ZEC", inviteCode, req.user?.userId],
+    params: [
+      title,
+      description,
+      currency || "ZEC",
+      inviteCode,
+      req.user?.userId,
+    ],
   });
 
   const session = result.rows[0];
@@ -73,9 +79,13 @@ router.post("/", authMiddleware, async (req, res) => {
 
 router.get("/:id", authMiddleware, async (req, res) => {
   const id = req.params.id;
+
   try {
     const result = await sql({
-      text: `SELECT * FROM sessions WHERE id = $1`,
+      text: `SELECT s.id, s.title, s.description, s.currency, s.created_at,
+      u.id as owner_id, u.username as owner_username, u.zaddr as owner_zaddr FROM sessions s 
+      JOIN users u ON s.owner_id = u.id 
+      WHERE s.id = $1`,
       params: [id],
     });
 
@@ -100,7 +110,22 @@ router.get("/:id", authMiddleware, async (req, res) => {
       })
     ).rows;
 
-    res.json({ session, participants, expenses });
+    res.json({
+      session: {
+        id: session.id,
+        title: session.title,
+        description: session.description,
+        currency: session.currency,
+        created_at: session.created_at,
+        owner: {
+          id: session.owner_id,
+          username: session.username,
+          zaddr: session.owner_zaddr,
+        },
+      },
+      participants,
+      expenses,
+    });
   } catch (err) {
     console.error("sessions/:id", err);
   }
