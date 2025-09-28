@@ -16,10 +16,10 @@ router.post("/register", async (req, res) => {
   const hash = await bcrypt.hash(password, 10);
 
   const result = await sql({
-    text: `INSERT INTO users (username, password_hash) 
-            VALUES ($1,$2)
+    text: `INSERT INTO users (email, username, password_hash) 
+            VALUES ($1,$2,$3)
             RETURNING id, username, zaddr`,
-    params: [email, hash],
+    params: [email, email, hash],
   });
 
   const user = result.rows[0];
