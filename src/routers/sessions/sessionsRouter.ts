@@ -83,8 +83,9 @@ router.get("/:id", authMiddleware, async (req, res) => {
   try {
     const result = await sql({
       text: `SELECT s.id, s.title, s.description, s.currency, s.created_at,
-      u.id as owner_id, u.username as owner_username, u.zaddr as owner_zaddr FROM sessions s 
-      JOIN users u ON s.owner_id = u.id 
+      u.id as owner_id, u.username as owner_username, u.zaddr as owner_zaddr 
+      FROM sessions s 
+      JOIN users u ON s.created_by = u.id 
       WHERE s.id = $1`,
       params: [id],
     });
