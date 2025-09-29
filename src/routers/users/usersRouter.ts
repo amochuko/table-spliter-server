@@ -17,6 +17,7 @@ router.get("/me", authMiddleware, async (req, res) => {
 
 router.patch("/me", authMiddleware, async (req, res) => {
   const { zaddr } = req.body;
+  console.log("zaddr called", zaddr, req.user?.userId);
   if (!zaddr) {
     res.status(400).json({ error: "Missing zaddr information" });
     return;
@@ -40,6 +41,17 @@ router.patch("/me", authMiddleware, async (req, res) => {
     console.error("/me", err);
     res.status(500).json({ error: "Failed saving zaddr" });
   }
+});
+
+router.delete("/me/zaddr", authMiddleware, async (req, res) => {
+  await sql({
+    text: `UPDATE users
+      SET zaddr = NULL
+      WHERE id = $1`,
+    params: [req.user?.userId],
+  });
+
+  res.json({ message: "ZAddr deleted" });
 });
 
 export default router;
