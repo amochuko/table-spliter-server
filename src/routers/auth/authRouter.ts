@@ -25,7 +25,7 @@ router.post("/register", async (req, res) => {
   const user = result.rows[0];
   const token = signToken({ userId: user.id, email: user.username });
 
-  res.json({ token, user });
+  res.json({ token, user: { id: user.id, username: user.email, zaddr: user.zaddr }, });
 });
 
 router.post("/login", async (req, res) => {
