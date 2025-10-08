@@ -52,12 +52,21 @@ router.post("/", authMiddleware, async (req, res) => {
 
       const sess = result.rows[0];
 
+      const userResult = await sql({
+        text: `SELECT username, zaddr 
+        FROM users
+        WHERE id = $1`,
+        params: [req.user?.userId],
+      });
+
+      const user = userResult.rows[0];
+
       // add creator as participant
       await sql({
         text: `INSERT INTO participants (session_id, user_id, username, zaddr)
       VALUES ($1,$2,$3,$4)
       RETURNING *`,
-        params: [sess.id, req.user?.userId, req.user?.username, null],
+        params: [sess.id, req.user?.userId, user.username, user.zaddr],
         client: dbClient,
       });
 
@@ -76,8 +85,6 @@ router.post("/", authMiddleware, async (req, res) => {
 
       return updatedSession.rows[0];
     });
-
-
 
     res.json({ session });
   } catch (err) {
