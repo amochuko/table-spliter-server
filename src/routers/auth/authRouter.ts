@@ -22,10 +22,16 @@ router.post("/register", async (req, res) => {
     params: [email, email, hash],
   });
 
-  const user = result.rows[0];
-  const token = signToken({ userId: user.id, email: user.username });
+  const row = result.rows[0];
+  const token = signToken({ userId: row.id, email: row.username });
 
-  res.json({ token, user: { id: user.id, username: user.email, zaddr: user.zaddr }, });
+  delete row.password;
+  const user = {
+    ...row,
+    email: row.username,
+  };
+
+  res.json({ token, user });
 });
 
 router.post("/login", async (req, res) => {
@@ -48,14 +54,20 @@ router.post("/login", async (req, res) => {
 
   const comparePwd = await bcrypt.compare(password, user.password_hash);
   if (!comparePwd) {
+    console.log({ comparePwd , password_hash: user.password_hash});
     res.status(400).json({ error: "Invalid credentianls" });
   }
-
+  
   const token = signToken({ userId: user.id, email: user.email });
 
   res.json({
     token,
-    user: { id: user.id, username: user.email, zaddr: user.zaddr },
+    user: {
+      id: user.id,
+      username: user.email,
+      email: user.email,
+      zaddr: user.zaddr,
+    },
   });
 });
 
