@@ -54,10 +54,13 @@ dbClient.getPool().on("error", (err) => {
 type SQLArgs = {
   text: string;
   params?: any[];
+  client?: pg.PoolClient;
 };
 export async function sql<T extends pg.QueryResultRow = any>(args: SQLArgs) {
-  const client = await dbClient.getPool().connect();
-  console.log("🔌 DBClient connect");
+  const client = args.client ?? (await dbClient.getPool().connect());
+  const shouldRelease = !args.client;
+
+  if (!args.client) console.log("🔌 DBClient connect");
 
   try {
     const result = await client.query<T>(args.text, args.params);
@@ -71,8 +74,10 @@ export async function sql<T extends pg.QueryResultRow = any>(args: SQLArgs) {
 
     throw new Error(err as any);
   } finally {
-    client.release();
-    console.log("✅ DBClient released");
+    if (shouldRelease) {
+      client.release();
+      console.log("✅ DBClient released");
+    }
   }
 }
 
@@ -86,7 +91,7 @@ export async function queryOne<T extends pg.QueryResultRow = any>(
 }
 
 // Transaction support
-export async function withTransaction<T>(
+export async function sqlWithTransaction<T>(
   fn: (client: pg.PoolClient) => Promise<T>
 ): Promise<T> {
   const client = await dbClient.getPool().connect();

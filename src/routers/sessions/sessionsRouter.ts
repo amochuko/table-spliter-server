@@ -1,6 +1,6 @@
 import express from "express";
 import QRCode from "qrcode";
-import { sql } from "../../common/database/sqlConnection";
+import { sql, sqlWithTransaction } from "../../common/database/sqlConnection";
 import env from "../../common/utils/env";
 import { getInviteCode } from "../../common/utils/helpers";
 import { authMiddleware } from "../../middleware/authMiddleware";
@@ -34,47 +34,63 @@ router.post("/", authMiddleware, async (req, res) => {
 
   const inviteCode = getInviteCode();
 
-  const result = await sql({
-    text: `INSERT INTO sessions (title, description, currency, invite_code, created_by) 
-    VALUES ($1,$2,$3,$4,$5)
-    RETURNING *`,
-    params: [
-      title,
-      description,
-      currency || "ZEC",
-      inviteCode,
-      req.user?.userId,
-    ],
-  });
+  try {
+    const session = await sqlWithTransaction(async (dbClient) => {
+      const result = await sql({
+        text: `INSERT INTO sessions (title, description, currency, invite_code, created_by) 
+      VALUES ($1,$2,$3,$4,$5)
+      RETURNING *`,
+        params: [
+          title,
+          description,
+          currency || "ZEC",
+          inviteCode,
+          req.user?.userId,
+        ],
+        client: dbClient,
+      });
 
-  const session = result.rows[0];
+      const sess = result.rows[0];
 
-  // add creator as participant
-  const participantResult = await sql({
-    text: `INSERT INTO participants (session_id, user_id, username, zaddr)
+      const userResult = await sql({
+        text: `SELECT username, zaddr 
+        FROM users
+        WHERE id = $1`,
+        params: [req.user?.userId],
+      });
+
+      const user = userResult.rows[0];
+
+      // add creator as participant
+      await sql({
+        text: `INSERT INTO participants (session_id, user_id, username, zaddr)
       VALUES ($1,$2,$3,$4)
       RETURNING *`,
-    params: [session.id, req.user?.userId, req.user?.username, null],
-  });
+        params: [sess.id, req.user?.userId, user.username, user.zaddr],
+        client: dbClient,
+      });
 
-  const participant = participantResult.rows[0];
-  // create invite url and QR data URL
-  const inviteUrl = `${APP_SCHEME}join/${session.invite_code}`;
-  const qrDatatUrl = await QRCode.toDataURL(inviteUrl);
+      // create invite url and QR data URL
+      const inviteUrl = `${APP_SCHEME}join/${sess.invite_code}`;
+      const qrDataUrl = await QRCode.toDataURL(inviteUrl);
 
-  res.json({
-    session: {
-      id: session.id,
-      title: session.title,
-      description: session.description,
-      currency: session.currency,
-      invite_code: session.invite_code,
-      created_by: session.created_by,
-      invite_url: inviteUrl,
-      qr: qrDatatUrl,
-    },
-    participant,
-  });
+      const updatedSession = await sql({
+        text: `UPDATE sessions
+              SET qr_data_url = $1, invite_url = $2
+              WHERE id = $3
+              RETURNING *`,
+        params: [qrDataUrl, inviteUrl, sess.id],
+        client: dbClient,
+      });
+
+      return updatedSession.rows[0];
+    });
+
+    res.json({ session });
+  } catch (err) {
+    console.error("sessionRouter:post", err);
+    res.status(404).json({ error: "Failed to create a Session." });
+  }
 });
 
 router.get("/:id", authMiddleware, async (req, res) => {
