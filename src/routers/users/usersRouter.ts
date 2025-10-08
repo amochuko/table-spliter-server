@@ -17,7 +17,7 @@ router.get("/me", authMiddleware, async (req, res) => {
 
 router.patch("/me", authMiddleware, async (req, res) => {
   const { zaddr } = req.body;
-  console.log("zaddr called", zaddr, req.user?.userId);
+  
   if (!zaddr) {
     res.status(400).json({ error: "Missing zaddr information" });
     return;
@@ -38,7 +38,7 @@ router.patch("/me", authMiddleware, async (req, res) => {
       user: { id: user.id, username: user.email, zaddr: user.zaddr },
     });
   } catch (err) {
-    console.error("/me", err);
+    console.error("router.patch(/me)", err);
     res.status(500).json({ error: "Failed saving zaddr" });
   }
 });
