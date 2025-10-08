@@ -53,7 +53,7 @@ router.post("/", authMiddleware, async (req, res) => {
       const sess = result.rows[0];
 
       const userResult = await sql({
-        text: `SELECT username, zaddr 
+        text: `SELECT email, zaddr 
         FROM users
         WHERE id = $1`,
         params: [req.user?.userId],
@@ -113,10 +113,11 @@ router.get("/:id", authMiddleware, async (req, res) => {
     const session = result.rows[0];
     const participants = (
       await sql({
-        text: `SELECT id, username,zaddr, user_id FROM participants WHERE session_id = $1`,
+        text: `SELECT id, username, zaddr, user_id FROM participants WHERE session_id = $1`,
         params: [id],
       })
     ).rows;
+
     const expenses = (
       await sql({
         text: `SELECT e.*, p.username as payer_username, p.id as payer_participant_id FROM expenses e 
@@ -127,7 +128,7 @@ router.get("/:id", authMiddleware, async (req, res) => {
       })
     ).rows;
 
-    res.json({
+    const data = {
       session: {
         id: session.id,
         title: session.title,
@@ -136,13 +137,15 @@ router.get("/:id", authMiddleware, async (req, res) => {
         created_at: session.created_at,
         owner: {
           id: session.owner_id,
-          username: session.username,
+          username: session.owner_username,
           zaddr: session.owner_zaddr,
         },
       },
       participants,
       expenses,
-    });
+    };
+
+    res.json(data);
   } catch (err) {
     console.error("sessions/:id", err);
   }
