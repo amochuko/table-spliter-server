@@ -26,19 +26,27 @@ router.get("/", authMiddleware, async (req, res) => {
 });
 
 router.post("/", authMiddleware, async (req, res) => {
-  const { title, currency, description } = req.body;
-
-  if (!title) {
-    res.status(400).json({ error: "Session needs a title" });
+  //
+  for (const key in req.body) {
+    if (
+      req.body[key] === undefined ||
+      req.body[key] === null ||
+      req.body[key] === ""
+    ) {
+      res.status(400).json({ error: `Missing ${key} field` });
+      return;
+    }
   }
+
+  const { title, currency, description, startDateTime, endDateTime } = req.body;
 
   const inviteCode = getInviteCode();
 
   try {
     const session = await sqlWithTransaction(async (dbClient) => {
       const result = await sql({
-        text: `INSERT INTO sessions (title, description, currency, invite_code, created_by) 
-      VALUES ($1,$2,$3,$4,$5)
+        text: `INSERT INTO sessions (title, description, currency, invite_code, created_by, start_datetime, end_datetime) 
+      VALUES ($1,$2,$3,$4,$5,$6,$7)
       RETURNING *`,
         params: [
           title,
@@ -46,6 +54,8 @@ router.post("/", authMiddleware, async (req, res) => {
           currency || "ZEC",
           inviteCode,
           req.user?.userId,
+          startDateTime,
+          endDateTime,
         ],
         client: dbClient,
       });
@@ -99,7 +109,9 @@ router.get("/:id", authMiddleware, async (req, res) => {
   try {
     const result = await sql({
       text: `SELECT s.id, s.title, s.description, s.currency, s.created_at,
-      u.id as owner_id, u.username as owner_username, u.zaddr as owner_zaddr 
+      u.id as owner_id, 
+      u.username as owner_username, 
+      u.zaddr as owner_zaddr 
       FROM sessions s 
       JOIN users u ON s.created_by = u.id 
       WHERE s.id = $1`,
@@ -194,11 +206,15 @@ router.post("/:id/expenses", authMiddleware, async (req, res) => {
     })
   ).rows;
 
-  res.json({ sessionId: id, participants, expenses });
+  const data = { sessionId: id, participants, expenses };
+  console.log(data);
+
+  res.json(data);
 });
 
 router.post("/join", authMiddleware, async (req, res) => {
   const { inviteCode } = req.body;
+  console.log({ inviteCode });
 
   const sessions_result = await sql({
     text: `SELECT * FROM sessions WHERE invite_code = $1`,
@@ -215,7 +231,7 @@ router.post("/join", authMiddleware, async (req, res) => {
   // check participant exist
   const participants_result = await sql({
     text: `SELECT * FROM participants WHERE session_id = $1 AND user_id = $2`,
-    params: [session.id, req.user?.userId, req.user?.username],
+    params: [session.id, req.user?.userId],
   });
 
   if (!participants_result.rows[0]) {
@@ -223,6 +239,7 @@ router.post("/join", authMiddleware, async (req, res) => {
       text: `INSERT INTO participants (session_id, user_id, username) VALUES ($1,$2,$3) RETURNING *`,
       params: [session.id, req.user?.userId, req.user?.username],
     });
+
     participant = p.rows[0];
   } else {
     {
@@ -233,15 +250,23 @@ router.post("/join", authMiddleware, async (req, res) => {
   // return session details
   const participants = (
     await sql({
-      text: `SELECT id, username, zaddr, user_id FROM participants WHERE session_id = $1`,
+      text: `SELECT id, username, zaddr, user_id 
+      FROM participants 
+      WHERE session_id = $1`,
       params: [session.id],
     })
   ).rows;
 
   const expenses = (
     await sql({
-      text: `SELECT e.*, p.username as payer_username, p.id as payer_participant_id FROM e 
-  LEFT JOIN participants p ON p.id = e.payer_id WHERE e.session_id = $1 ORDER BY e.created_at ASC`,
+      text: `SELECT e.*, 
+      p.username as payer_username, 
+      p.id as payer_participant_id 
+      FROM expenses e
+      LEFT JOIN participants p 
+      ON p.id = e.payer_id 
+      WHERE e.session_id = $1 
+      ORDER BY e.created_at ASC`,
       params: [session.id],
     })
   ).rows;
