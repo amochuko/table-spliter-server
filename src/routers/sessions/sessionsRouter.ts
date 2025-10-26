@@ -20,7 +20,8 @@ router.get("/", authMiddleware, async (req, res) => {
 
     res.json({ sessions: result.rows });
   } catch (err) {
-    console.error(err);
+    console.error("sessionsRouter:get", err);
+
     res.status(404).json({ error: "Failed to fetch sessions" });
   }
 });
@@ -73,10 +74,10 @@ router.post("/", authMiddleware, async (req, res) => {
 
       // add creator as participant
       await sql({
-        text: `INSERT INTO participants (session_id, user_id, username, zaddr)
+        text: `INSERT INTO participants (session_id, user_id, email, zaddr)
       VALUES ($1,$2,$3,$4)
       RETURNING *`,
-        params: [sess.id, req.user?.userId, user.username, user.zaddr],
+        params: [sess.id, req.user?.userId, user.email, user.zaddr],
         client: dbClient,
       });
 
@@ -108,9 +109,14 @@ router.get("/:id", authMiddleware, async (req, res) => {
 
   try {
     const result = await sql({
-      text: `SELECT s.id, s.title, s.description, s.currency, s.created_at,
+      text: `SELECT s.id, s.title, s.description, 
+      s.currency, s.invite_code, s.created_by,
+      s.qr_data_url, s.invite_url,
+      s.created_at, s.start_datetime, 
+      s.end_datetime, 
       u.id as owner_id, 
       u.username as owner_username, 
+      u.email as owner_email,
       u.zaddr as owner_zaddr 
       FROM sessions s 
       JOIN users u ON s.created_by = u.id 
@@ -123,16 +129,18 @@ router.get("/:id", authMiddleware, async (req, res) => {
     }
 
     const session = result.rows[0];
+
     const participants = (
       await sql({
-        text: `SELECT id, username, zaddr, user_id FROM participants WHERE session_id = $1`,
+        text: `SELECT id, username, email, zaddr, user_id FROM participants 
+        WHERE session_id = $1`,
         params: [id],
       })
     ).rows;
 
     const expenses = (
       await sql({
-        text: `SELECT e.*, p.username as payer_username, p.id as payer_participant_id FROM expenses e 
+        text: `SELECT e.*, p.username as payer_username, p.email as payer_email, p.id as payer_participant_id FROM expenses e 
     LEFT JOIN participants p ON p.id = e.payer_id
     WHERE e.session_id = $1 
     ORDER BY e.created_at ASC`,
@@ -146,18 +154,24 @@ router.get("/:id", authMiddleware, async (req, res) => {
         title: session.title,
         description: session.description,
         currency: session.currency,
+        invite_code: session.invite_code,
+        invite_url: session.invite_url,
+        qr_data_url: session.qr_data_url,
         created_at: session.created_at,
+        start_datetime: session.start_datetime,
+        end_datetime: session.end_datetime,
         owner: {
-          id: session.owner_id,
+          id: session.created_by,
           username: session.owner_username,
           zaddr: session.owner_zaddr,
+          email: session.owner_email,
         },
       },
       participants,
       expenses,
     };
-
-    res.json(data);
+    
+    res.json({ sessionById: data });
   } catch (err) {
     console.error("sessions/:id", err);
   }
@@ -193,22 +207,27 @@ router.post("/:id/expenses", authMiddleware, async (req, res) => {
 
   const participants = (
     await sql({
-      text: `SELECT id, username, zaddr, user_id FROM participants WHERE session_id = $1`,
+      text: `SELECT id, username, zaddr, user_id 
+      FROM participants 
+      WHERE session_id = $1`,
       params: [id],
     })
   ).rows;
 
   const expenses = (
     await sql({
-      text: `SELECT e.*, p.username as payer_username, p.id as payer_participant_id FROM expenses
-        e LEFT JOIN participants p ON p.id = e.payer_id WHERE e.session_id = $1 ORDER BY e.created_at ASC`,
+      text: `SELECT e.*, p.username as payer_username, 
+      p.email as payer_email, p.id as payer_participant_id 
+      FROM expenses
+        e LEFT JOIN participants p ON p.id = e.payer_id 
+      WHERE e.session_id = $1 
+      ORDER BY e.created_at ASC`,
       params: [id],
     })
   ).rows;
 
   const data = { sessionId: id, participants, expenses };
-  console.log(data);
-
+  console.log("sessions/:id/expenses", data);
   res.json(data);
 });
 
