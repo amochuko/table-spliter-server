@@ -12,13 +12,24 @@ const router = express.Router({ mergeParams: true });
 
 router.get("/", authMiddleware, async (req, res) => {
   try {
-    const result = await sql({
+    const ownedResult = await sql({
       text: `SELECT * FROM sessions 
           WHERE created_by = $1`,
       params: [req.user?.userId],
     });
 
-    res.json({ sessions: result.rows });
+    const joinedResult = await sql({
+      text: `SELECT s.* 
+      FROM sessions s 
+      INNER JOIN participants p ON p.session_id = s.id
+      WHERE p.user_id = $1 AND s.created_by != $1`,
+      params: [req.user?.userId],
+    });
+
+    res.json({
+      ownedSessions: ownedResult.rows,
+      joinedSessions: joinedResult.rows,
+    });
   } catch (err) {
     console.error("sessionsRouter:get", err);
 
@@ -170,7 +181,7 @@ router.get("/:id", authMiddleware, async (req, res) => {
       participants,
       expenses,
     };
-    
+
     res.json({ sessionById: data });
   } catch (err) {
     console.error("sessions/:id", err);
