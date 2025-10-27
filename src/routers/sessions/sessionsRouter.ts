@@ -194,7 +194,23 @@ router.post("/:id/expenses", authMiddleware, async (req, res) => {
   const { memo, amount } = req.body;
 
   if (!memo || !amount) {
-    res.status(400).json({ error: "Missing credentials" });
+    res.status(400).json({ error: "Missing memo or amount!" });
+    return;
+  }
+
+  const sessionsResult = await sql({
+    text: `SELECT * FROM sessions WHERE id = $1`,
+    params: [id],
+  });
+  const session = sessionsResult.rows[0];
+  if (!session) {
+    res.status(404).json({ error: "Session not found" });
+    return;
+  }
+
+  // verify that current user is owner of session
+  if (session.created_by !== req.user?.userId) {
+    res.status(403).json({ error: "Only session owner can add expenses" });
     return;
   }
 
@@ -205,12 +221,14 @@ router.post("/:id/expenses", authMiddleware, async (req, res) => {
     params: [id, req.user?.userId],
   });
 
+  // find participant record for session owner
   const participant = part_result.rows[0];
   if (!participant) {
-    res.status(400).json({ error: "User is not participant in session" });
+    res.status(400).json({ error: "User is not a participant in this session" });
     return;
   }
 
+  // insert expense
   await sql({
     text: `INSERT INTO expenses (session_id, payer_id, amount, memo) VALUES ($1,$2,$3,$4) RETURNING *`,
     params: [id, participant.id, amount, memo],
@@ -245,20 +263,20 @@ router.post("/:id/expenses", authMiddleware, async (req, res) => {
 router.post("/join", authMiddleware, async (req, res) => {
   const { inviteCode } = req.body;
   console.log({ inviteCode });
-  
+
   const sessions_result = await sql({
     text: `SELECT * FROM sessions WHERE invite_code = $1`,
     params: [inviteCode],
   });
   const session: Session = sessions_result.rows[0];
-  
+
   console.log("sessions/join", { session, user: req.user });
-  
+
   if (!session) {
     res.status(404).json({ error: "Invalid invite code" });
     return;
   }
-  
+
   let participant;
   // check participant exist
   const participants_result = await sql({
@@ -269,7 +287,12 @@ router.post("/join", authMiddleware, async (req, res) => {
   if (!participants_result.rows[0]) {
     const p = await sql({
       text: `INSERT INTO participants (session_id, user_id, username, email) VALUES ($1,$2,$3,$4) RETURNING *`,
-      params: [session.id, req.user?.userId, req.user?.username, req.user?.email],
+      params: [
+        session.id,
+        req.user?.userId,
+        req.user?.username,
+        req.user?.email,
+      ],
     });
 
     participant = p.rows[0];
@@ -303,7 +326,12 @@ router.post("/join", authMiddleware, async (req, res) => {
     })
   ).rows;
 
-  console.log("sessions/join", { session, participant, participants, expenses });
+  console.log("sessions/join", {
+    session,
+    participant,
+    participants,
+    expenses,
+  });
 
   res.json({ session, participant, participants, expenses });
 });
