@@ -9,7 +9,10 @@ export const authMiddleware = async (
   next: NextFunction
 ) => {
   const header = req.headers.authorization;
+
   if (!header) {
+    console.error("authMiddleware: Missing Auth in header");
+    
     res.status(401).json({ error: "Missing auth" });
     return;
   }

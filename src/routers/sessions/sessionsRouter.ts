@@ -12,33 +12,53 @@ const router = express.Router({ mergeParams: true });
 
 router.get("/", authMiddleware, async (req, res) => {
   try {
-    const result = await sql({
+    const ownedResult = await sql({
       text: `SELECT * FROM sessions 
           WHERE created_by = $1`,
       params: [req.user?.userId],
     });
 
-    res.json({ sessions: result.rows });
+    const joinedResult = await sql({
+      text: `SELECT s.* 
+      FROM sessions s 
+      INNER JOIN participants p ON p.session_id = s.id
+      WHERE p.user_id = $1 AND s.created_by != $1`,
+      params: [req.user?.userId],
+    });
+
+    res.json({
+      ownedSessions: ownedResult.rows,
+      joinedSessions: joinedResult.rows,
+    });
   } catch (err) {
-    console.error(err);
+    console.error("sessionsRouter:get", err);
+
     res.status(404).json({ error: "Failed to fetch sessions" });
   }
 });
 
 router.post("/", authMiddleware, async (req, res) => {
-  const { title, currency, description } = req.body;
-
-  if (!title) {
-    res.status(400).json({ error: "Session needs a title" });
+  //
+  for (const key in req.body) {
+    if (
+      req.body[key] === undefined ||
+      req.body[key] === null ||
+      req.body[key] === ""
+    ) {
+      res.status(400).json({ error: `Missing ${key} field` });
+      return;
+    }
   }
+
+  const { title, currency, description, startDateTime, endDateTime } = req.body;
 
   const inviteCode = getInviteCode();
 
   try {
     const session = await sqlWithTransaction(async (dbClient) => {
       const result = await sql({
-        text: `INSERT INTO sessions (title, description, currency, invite_code, created_by) 
-      VALUES ($1,$2,$3,$4,$5)
+        text: `INSERT INTO sessions (title, description, currency, invite_code, created_by, start_datetime, end_datetime) 
+      VALUES ($1,$2,$3,$4,$5,$6,$7)
       RETURNING *`,
         params: [
           title,
@@ -46,6 +66,8 @@ router.post("/", authMiddleware, async (req, res) => {
           currency || "ZEC",
           inviteCode,
           req.user?.userId,
+          startDateTime,
+          endDateTime,
         ],
         client: dbClient,
       });
@@ -53,7 +75,7 @@ router.post("/", authMiddleware, async (req, res) => {
       const sess = result.rows[0];
 
       const userResult = await sql({
-        text: `SELECT username, zaddr 
+        text: `SELECT email, zaddr 
         FROM users
         WHERE id = $1`,
         params: [req.user?.userId],
@@ -63,10 +85,10 @@ router.post("/", authMiddleware, async (req, res) => {
 
       // add creator as participant
       await sql({
-        text: `INSERT INTO participants (session_id, user_id, username, zaddr)
+        text: `INSERT INTO participants (session_id, user_id, email, zaddr)
       VALUES ($1,$2,$3,$4)
       RETURNING *`,
-        params: [sess.id, req.user?.userId, user.username, user.zaddr],
+        params: [sess.id, req.user?.userId, user.email, user.zaddr],
         client: dbClient,
       });
 
@@ -98,8 +120,15 @@ router.get("/:id", authMiddleware, async (req, res) => {
 
   try {
     const result = await sql({
-      text: `SELECT s.id, s.title, s.description, s.currency, s.created_at,
-      u.id as owner_id, u.username as owner_username, u.zaddr as owner_zaddr 
+      text: `SELECT s.id, s.title, s.description, 
+      s.currency, s.invite_code, s.created_by,
+      s.qr_data_url, s.invite_url,
+      s.created_at, s.start_datetime, 
+      s.end_datetime, 
+      u.id as owner_id, 
+      u.username as owner_username, 
+      u.email as owner_email,
+      u.zaddr as owner_zaddr 
       FROM sessions s 
       JOIN users u ON s.created_by = u.id 
       WHERE s.id = $1`,
@@ -111,15 +140,18 @@ router.get("/:id", authMiddleware, async (req, res) => {
     }
 
     const session = result.rows[0];
+
     const participants = (
       await sql({
-        text: `SELECT id, username,zaddr, user_id FROM participants WHERE session_id = $1`,
+        text: `SELECT id, username, email, zaddr, user_id FROM participants 
+        WHERE session_id = $1`,
         params: [id],
       })
     ).rows;
+
     const expenses = (
       await sql({
-        text: `SELECT e.*, p.username as payer_username, p.id as payer_participant_id FROM expenses e 
+        text: `SELECT e.*, p.username as payer_username, p.email as payer_email, p.id as payer_participant_id FROM expenses e 
     LEFT JOIN participants p ON p.id = e.payer_id
     WHERE e.session_id = $1 
     ORDER BY e.created_at ASC`,
@@ -127,22 +159,30 @@ router.get("/:id", authMiddleware, async (req, res) => {
       })
     ).rows;
 
-    res.json({
+    const data = {
       session: {
         id: session.id,
         title: session.title,
         description: session.description,
         currency: session.currency,
+        invite_code: session.invite_code,
+        invite_url: session.invite_url,
+        qr_data_url: session.qr_data_url,
         created_at: session.created_at,
+        start_datetime: session.start_datetime,
+        end_datetime: session.end_datetime,
         owner: {
-          id: session.owner_id,
-          username: session.username,
+          id: session.created_by,
+          username: session.owner_username,
           zaddr: session.owner_zaddr,
+          email: session.owner_email,
         },
       },
       participants,
       expenses,
-    });
+    };
+
+    res.json({ sessionById: data });
   } catch (err) {
     console.error("sessions/:id", err);
   }
@@ -178,24 +218,33 @@ router.post("/:id/expenses", authMiddleware, async (req, res) => {
 
   const participants = (
     await sql({
-      text: `SELECT id, username, zaddr, user_id FROM participants WHERE session_id = $1`,
+      text: `SELECT id, username, zaddr, user_id 
+      FROM participants 
+      WHERE session_id = $1`,
       params: [id],
     })
   ).rows;
 
   const expenses = (
     await sql({
-      text: `SELECT e.*, p.username as payer_username, p.id as payer_participant_id FROM expenses
-        e LEFT JOIN participants p ON p.id = e.payer_id WHERE e.session_id = $1 ORDER BY e.created_at ASC`,
+      text: `SELECT e.*, p.username as payer_username, 
+      p.email as payer_email, p.id as payer_participant_id 
+      FROM expenses
+        e LEFT JOIN participants p ON p.id = e.payer_id 
+      WHERE e.session_id = $1 
+      ORDER BY e.created_at ASC`,
       params: [id],
     })
   ).rows;
 
-  res.json({ sessionId: id, participants, expenses });
+  const data = { sessionId: id, participants, expenses };
+  console.log("sessions/:id/expenses", data);
+  res.json(data);
 });
 
 router.post("/join", authMiddleware, async (req, res) => {
   const { inviteCode } = req.body;
+  console.log({ inviteCode });
 
   const sessions_result = await sql({
     text: `SELECT * FROM sessions WHERE invite_code = $1`,
@@ -212,7 +261,7 @@ router.post("/join", authMiddleware, async (req, res) => {
   // check participant exist
   const participants_result = await sql({
     text: `SELECT * FROM participants WHERE session_id = $1 AND user_id = $2`,
-    params: [session.id, req.user?.userId, req.user?.username],
+    params: [session.id, req.user?.userId],
   });
 
   if (!participants_result.rows[0]) {
@@ -220,6 +269,7 @@ router.post("/join", authMiddleware, async (req, res) => {
       text: `INSERT INTO participants (session_id, user_id, username) VALUES ($1,$2,$3) RETURNING *`,
       params: [session.id, req.user?.userId, req.user?.username],
     });
+
     participant = p.rows[0];
   } else {
     {
@@ -230,15 +280,23 @@ router.post("/join", authMiddleware, async (req, res) => {
   // return session details
   const participants = (
     await sql({
-      text: `SELECT id, username, zaddr, user_id FROM participants WHERE session_id = $1`,
+      text: `SELECT id, username, zaddr, user_id 
+      FROM participants 
+      WHERE session_id = $1`,
       params: [session.id],
     })
   ).rows;
 
   const expenses = (
     await sql({
-      text: `SELECT e.*, p.username as payer_username, p.id as payer_participant_id FROM e 
-  LEFT JOIN participants p ON p.id = e.payer_id WHERE e.session_id = $1 ORDER BY e.created_at ASC`,
+      text: `SELECT e.*, 
+      p.username as payer_username, 
+      p.id as payer_participant_id 
+      FROM expenses e
+      LEFT JOIN participants p 
+      ON p.id = e.payer_id 
+      WHERE e.session_id = $1 
+      ORDER BY e.created_at ASC`,
       params: [session.id],
     })
   ).rows;

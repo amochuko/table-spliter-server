@@ -54,10 +54,9 @@ router.post("/login", async (req, res) => {
 
   const comparePwd = await bcrypt.compare(password, user.password_hash);
   if (!comparePwd) {
-    console.log({ comparePwd , password_hash: user.password_hash});
     res.status(400).json({ error: "Invalid credentianls" });
   }
-  
+
   const token = signToken({ userId: user.id, email: user.email });
 
   res.json({
