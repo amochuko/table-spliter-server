@@ -1,12 +1,11 @@
 import express from "express";
 import QRCode from "qrcode";
 import { sql, sqlWithTransaction } from "../../common/database/sqlConnection";
-import env from "../../common/utils/env";
 import { getInviteCode } from "../../common/utils/helpers";
 import { authMiddleware } from "../../middleware/authMiddleware";
 import { Session } from "../../types/session";
 
-const APP_SCHEME = env.APP_SCHEME || "tabsplit://";
+// const APP_SCHEME = env.APP_SCHEME || "tabsplit://";
 
 const router = express.Router({ mergeParams: true });
 
@@ -93,7 +92,8 @@ router.post("/", authMiddleware, async (req, res) => {
       });
 
       // create invite url and QR data URL
-      const inviteUrl = `${APP_SCHEME}join/${sess.invite_code}`;
+      // const inviteUrl = `${APP_SCHEME}join/${sess.invite_code}`;
+      const inviteUrl = `https://tabsplit.app/join/${sess.invite_code}`;
       const qrDataUrl = await QRCode.toDataURL(inviteUrl);
 
       const updatedSession = await sql({
@@ -245,18 +245,20 @@ router.post("/:id/expenses", authMiddleware, async (req, res) => {
 router.post("/join", authMiddleware, async (req, res) => {
   const { inviteCode } = req.body;
   console.log({ inviteCode });
-
+  
   const sessions_result = await sql({
     text: `SELECT * FROM sessions WHERE invite_code = $1`,
     params: [inviteCode],
   });
   const session: Session = sessions_result.rows[0];
-
+  
+  console.log("sessions/join", { session, user: req.user });
+  
   if (!session) {
     res.status(404).json({ error: "Invalid invite code" });
     return;
   }
-
+  
   let participant;
   // check participant exist
   const participants_result = await sql({
@@ -266,8 +268,8 @@ router.post("/join", authMiddleware, async (req, res) => {
 
   if (!participants_result.rows[0]) {
     const p = await sql({
-      text: `INSERT INTO participants (session_id, user_id, username) VALUES ($1,$2,$3) RETURNING *`,
-      params: [session.id, req.user?.userId, req.user?.username],
+      text: `INSERT INTO participants (session_id, user_id, username, email) VALUES ($1,$2,$3,$4) RETURNING *`,
+      params: [session.id, req.user?.userId, req.user?.username, req.user?.email],
     });
 
     participant = p.rows[0];
@@ -300,6 +302,8 @@ router.post("/join", authMiddleware, async (req, res) => {
       params: [session.id],
     })
   ).rows;
+
+  console.log("sessions/join", { session, participant, participants, expenses });
 
   res.json({ session, participant, participants, expenses });
 });
