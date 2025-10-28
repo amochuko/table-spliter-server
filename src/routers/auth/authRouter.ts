@@ -19,7 +19,7 @@ router.post("/register", async (req, res) => {
   const result = await sql({
     text: `INSERT INTO users (email, username, password_hash) 
             VALUES ($1,$2,$3)
-            RETURNING id, username, zaddr`,
+            RETURNING id, email, username, zaddr`,
     params: [email, email, hash],
   });
 
@@ -29,7 +29,6 @@ router.post("/register", async (req, res) => {
   delete row.password;
   const user = {
     ...row,
-    email: row.username,
   };
 
   res.json({ token, user });
