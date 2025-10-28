@@ -2,6 +2,7 @@ import bcrypt from "bcrypt";
 import express from "express";
 import { sql } from "../../common/database/sqlConnection";
 import { signToken } from "../../common/utils/helpers";
+import { authMiddleware } from "../../middleware/authMiddleware";
 
 const router = express.Router({ mergeParams: true });
 
@@ -68,6 +69,37 @@ router.post("/login", async (req, res) => {
       zaddr: user.zaddr,
     },
   });
+});
+
+router.put("/update-profile", authMiddleware, async (req, res) => {
+  const { email, username, zaddr } = req.body;
+  const userId = req.user?.userId;
+
+  try {
+    // using COALESCE to only update provided fields
+    const result = await sql({
+      text: `UPDATE users 
+    SET 
+      email = COALESCE($1, email),
+      username = COALESCE($2, username), 
+      zaddr = COALESCE($3, zaddr)
+    WHERE id=$4 
+    RETURNING id, email, username, zaddr`,
+      params: [email, username, zaddr, userId],
+    });
+
+    const user = result.rows[0];
+
+    if (!user) {
+      res.status(404).json({ error: "User not found!" });
+      return;
+    }
+
+    res.json({ user });
+  } catch (err) {
+    console.error("auth/update-profile error:", err);
+    res.status(500).json({ error: "Failed to update profile" });
+  }
 });
 
 export default router;
