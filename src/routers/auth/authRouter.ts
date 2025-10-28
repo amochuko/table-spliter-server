@@ -44,7 +44,7 @@ router.post("/login", async (req, res) => {
   }
 
   const result = await sql({
-    text: `SELECT * FROM users WHERE username = $1`,
+    text: `SELECT * FROM users WHERE email = $1`,
     params: [email],
   });
 
