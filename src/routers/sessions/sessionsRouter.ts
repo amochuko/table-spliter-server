@@ -62,7 +62,7 @@ router.post("/", authMiddleware, async (req, res) => {
         params: [
           title,
           description,
-          currency || "ZEC",
+          currency || "USD",
           inviteCode,
           req.user?.userId,
           startDateTime,
