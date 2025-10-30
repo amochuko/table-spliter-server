@@ -224,7 +224,9 @@ router.post("/:id/expenses", authMiddleware, async (req, res) => {
   // find participant record for session owner
   const participant = part_result.rows[0];
   if (!participant) {
-    res.status(400).json({ error: "User is not a participant in this session" });
+    res
+      .status(400)
+      .json({ error: "User is not a participant in this session" });
     return;
   }
 
@@ -334,6 +336,88 @@ router.post("/join", authMiddleware, async (req, res) => {
   });
 
   res.json({ session, participant, participants, expenses });
+});
+
+router.delete("/:id/leave", authMiddleware, async (req, res) => {
+  const sessionId = req.params.id;
+  const userId = req.user?.userId;
+
+  try {
+    const participantsResult = await sql({
+      text: `SELECT id FROM participants 
+      WHERE session_id = $1 AND user_id=$2`,
+      params: [sessionId, userId],
+    });
+
+    // Get participant record
+    const participant = participantsResult.rows[0];
+    if (!participant) {
+      res.status(404).json({ error: "Not a participant of this session" });
+      return;
+    }
+
+    // Check for unpaid expenses or zero balance
+    const balanceResult = await sql({
+      text: `SELECT SUML(CASE WHEN e.payer_id=$1 THEN e.amount ELSE -e.amount / COUNT(p.id) OVER () END) AS balance 
+      FROM expenses e 
+      JOIN participants p ON p.session_id == e.session_id
+      WHERE s.session_id = $2`,
+      params: [participant.id, sessionId],
+    });
+
+    const balance = parseFloat(balanceResult.rows[0].balance || 0);
+    if (Math.abs(balance) > 0.0001) {
+      res.status(400).json({ error: "Cannot leave: unsettled balance exists" });
+      return;
+    }
+
+    await sql({
+      text: `DELETE FROM participants 
+      WHERE id=$1`,
+      params: [participant.id],
+    });
+
+    res.json({ message: "Left session successfully" });
+  } catch (err) {
+    console.error("sessions/:id/leave", err);
+  }
+});
+
+router.delete("/:id", authMiddleware, async (req, res) => {
+  const sessionId = req.params.id;
+
+  try {
+    const sessionResult = await sql({
+      text: `SELECT * FROM sessions 
+      WHERE id = $1`,
+      params: [sessionId],
+    });
+
+    const session = sessionResult.rows[0];
+    if (!session) {
+      res.status(404).json({ error: "Session not found" });
+      return;
+    }
+
+    // verify that current user is owner of session
+    if (session.created_by !== req.user?.userId) {
+      res.status(403).json({ error: "Only session owner can delete session" });
+      return;
+    }
+
+    // delete session
+    await sql({
+      text: `DELETE FROM sessions 
+      WHERE id = $1`,
+      params: [sessionId],
+    });
+
+    res.json({ message: true });
+  } catch (err) {
+    console.error("sessions/:id delete", err);
+    res.status(500).json({ error: "Failed to delete session" });
+    return;
+  }
 });
 
 export default router;
