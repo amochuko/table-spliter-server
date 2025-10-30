@@ -383,4 +383,41 @@ router.delete("/:id/leave", authMiddleware, async (req, res) => {
   }
 });
 
+router.delete("/:id", authMiddleware, async (req, res) => {
+  const sessionId = req.params.id;
+
+  try {
+    const sessionResult = await sql({
+      text: `SELECT * FROM sessions 
+      WHERE id = $1`,
+      params: [sessionId],
+    });
+
+    const session = sessionResult.rows[0];
+    if (!session) {
+      res.status(404).json({ error: "Session not found" });
+      return;
+    }
+
+    // verify that current user is owner of session
+    if (session.created_by !== req.user?.userId) {
+      res.status(403).json({ error: "Only session owner can delete session" });
+      return;
+    }
+
+    // delete session
+    await sql({
+      text: `DELETE FROM sessions 
+      WHERE id = $1`,
+      params: [sessionId],
+    });
+
+    res.json({ message: true });
+  } catch (err) {
+    console.error("sessions/:id delete", err);
+    res.status(500).json({ error: "Failed to delete session" });
+    return;
+  }
+});
+
 export default router;
